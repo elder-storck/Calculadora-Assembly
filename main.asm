@@ -1,188 +1,252 @@
 segment code
-
-;org 100h
-..start:
-    MOV     AX,data			;Inicializa os registradores
-	MOV 	DS,AX
-    MOV 	AX,stack
-	MOV 	SS,AX
-    MOV 	SP,stacktop
-
-;inicio do programa
-
-loop_main:
-
-    mov ah,9
-    mov dx,mensagem
+    ..start:
+    mov ax, data
+    mov ds, ax
+    mov ax, stack 
+    mov ss, ax
+    mov sp, stacktop
+    
+main:
+    mov dx, offset 
+    mov ah, 0Ah 
+    int 21h 
+    
+    mov dx, nova_linha
+    mov ah, 09h
     int 21h
-
-    ;Leitura da entrada do usuário
-    mov dx, buffer ; Endereço do offset onde a entrada será armazenada
-    mov ah, 0Ah ; Função 0Ah para leitura do teclado
-    int 21h ; Interrupção para leitura dos dados
-
-    call Print_input
     
-    mov ah,byte[buffer+2]
-    cmp ah,'s'
-    je sair
-
-    mov ah, [buffer+2]
-    cmp ah, '-'
-    je sair
-
+    mov al, byte[offset+2] 
     
+    cmp al, 's' 
+    je exit 
+
+    xor ax, ax
+    xor bx, bx
     
-
-
-
-    ;mov ah,9
-
-
-    ;je Print_input
-
-    ;jmp number1_pos
-
-    ;number1 positivo
-    ;mov ah,byte
-
+    call processar_expressao
     
+    call print
+    jmp main
 
-
-
-    jmp loop_main
-
-sair:
+exit:
     mov ah, 4Ch
     int 21h
 
-Print_input:
-    ; Adiciona terminador '$' após a entrada
-    mov bx, buffer+1    ; Offset do tamanho real
-    mov bl, [bx]        ; BL = número de caracteres lidos
-    mov bh, 0
-    mov [buffer+2+bx], byte '$' ; Coloca '$' após a string
-
-    ; Mostra o que foi lido
-    mov ah, 9
-    mov dx, buffer+2    ; Offset do início da string
-    int 21h
-ret
-
-number1_neg:
-    mov al, byte[buffer + 6]
-    cmp al,'+'
-    je Operacao
-
-    cmp al,'-'
-    je Operacao
-
-    cmp al,'*'
-    je Operacao
-
-    cmp al,'/'
-    je Operacao
-
-; nn_op_
-    mov al,byte[buffer + 8] ; operação
-    jmp Operacao
-
-    n_op:
-    mov al,byte[buffer + 6] ; operação
-    jmp Operacao
-
-number1_pos:
-    mov ah, byte[buffer + 4]
-    cmp ah,'+'
-    je p_op
-    cmp ah,'-'
-    je p_op
-    cmp ah,'*'
-    je p_op
-    cmp ah,'/'
-    je p_op
-
-; pp_op_
-    mov al,byte[buffer + 6] ; operação
-    jmp Operacao
-p_op:
-    mov al,byte[buffer + 4] ; operação
-    jmp Operacao
+processar_expressao:
+    push bx
+    push cx
+    push dx
+    push si
+    push di
     
+    mov si, offset+2
+    call encontrar_operador
     
-Operacao:
-    ;operaçao já está em l
-    cmp al,'+'
-    je Somar
-    cmp al,'-'
-    je Subtrair
-    cmp al,'*'
-    je Multiplicar
-    cmp al,'/'
-    je Dividir
-
-    jmp loop_main
-
-
-Somar:
-    mov ah,9
-    mov dx,opSoma
-    int 21h
-    jmp loop_main
-
-Subtrair:
-    mov ah,9
-    mov dx,opSub
-    int 21h
-    jmp loop_main
-
-Multiplicar:
-    mov ah,9
-    mov dx,opMult
-    int 21h
-    jmp loop_main
-
-Dividir:
-    mov ah,9
-    mov dx,opDiv
-    int 21h
-    jmp loop_main
-
+    mov si, offset+2
+    mov cx, di
+    sub cx, si
+    call processar_numero
+    mov bx, ax
     
+    mov si, di
+    inc si
+    call processar_numero
+    mov cx, ax
     
+    mov dl, [di]
+    call calculate
+    
+    pop di
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    ret
 
-;    mov ah,9
-;    mov dx,resultado
-;    int 21h
+encontrar_operador:
+    mov di, si
+loop_operador:
+    mov dl, [di]
+    cmp dl, '+'
+    je operador_encontrado
+    cmp dl, '-'
+    je verificar_negativo
+    cmp dl, '*'
+    je operador_encontrado
+    cmp dl, '/'
+    je operador_encontrado
+    inc di
+    jmp loop_operador
 
+verificar_negativo:
+    cmp di, offset+2
+    je nao_e_operador
+    mov al, [di-1]
+    cmp al, '+'
+    je nao_e_operador
+    cmp al, '-'
+    je nao_e_operador
+    cmp al, '*'
+    je nao_e_operador
+    cmp al, '/'
+    je nao_e_operador
+    jmp operador_encontrado
 
+nao_e_operador:
+    inc di
+    jmp loop_operador
+    
+operador_encontrado:
+    ret
 
+processar_numero:
+    push bx
+    push cx
+    push dx
+    push si
+    
+    xor ax, ax
+    xor dh, dh
+    
+    mov bl, byte [si]
+    cmp bl, '-'
+    jne nao_negativo
+    mov dh, 1
+    inc si
+    
+nao_negativo:
+    xor ax, ax
+    mov bl, byte [si]
+    cmp bl, '0'
+    jl fim_digitos
+    cmp bl, '9'
+    jg fim_digitos
+    
+    sub bl, '0'
+    movzx ax, bl
+    inc si
+    
+    mov bl, byte [si]
+    cmp bl, '0'
+    jl fim_digitos
+    cmp bl, '9'
+    jg fim_digitos
+    
+    imul ax, 10  
+    sub bl, '0'
+    movzx bx, bl
+    add ax, bx   
+    
+fim_digitos:
+    cmp dh, 1
+    jne fim_processar
+    neg ax
+    
+fim_processar:
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    ret
 
+calculate:
+    cmp dl, '+' 
+    je sum 
+    cmp dl, '-' 
+    je subtr 
+    cmp dl, '*' 
+    je mult 
+    cmp dl, '/' 
+    je divs
+    jmp exit 
 
+sum: 
+    mov ax, bx  
+    add ax, cx  
+    mov word [resultado], ax 
+    ret
 
+subtr:
+    mov ax, bx  
+    sub ax, cx  
+    mov word [resultado], ax 
+    ret
 
+mult:
+    mov ax, bx  
+    imul cx     
+    mov word [resultado], ax 
+    ret
 
+divs:
+    cmp cx, 0   
+    mov ax, bx  
+    cwd         
+    idiv cx     
+    mov word [resultado], ax 
+    ret
 
+print:
+    mov ax, word [resultado] 
+    call bin2ascii 
+    mov dx, saida 
+    mov ah, 09h 
+    int 21h 
+    ret
 
+bin2ascii:
+    push ax 
+    push bx
+    push cx
+    push dx
+    push si
+    
+    mov cx, 0 
+    test ax, ax
+    jns positivo
+    neg ax 
+    mov cx, 1 
 
+positivo:
+    mov si, 4 
+    mov bx, 10 
 
+conversao_loop:
+    xor dx, dx
+    div bx
+    add dl, '0'
+    mov byte[saida+si], dl
+    dec si
+    test ax, ax
+    jnz conversao_loop
+    
+preenche_zeros:
+    cmp si, 0
+    jl adiciona_sinal 
+    mov byte[saida+si], '0'
+    dec si
+    jmp preenche_zeros
+    
+adiciona_sinal:
+    test cx, cx
+    jz fim_bin2ascii
+    mov byte[saida], '-'
 
-segment data 
-    CR equ 0dh
-    LF equ 0ah
-    mensagem db 'entre com operacao no formato (-99 a 99)( op )(-99 a 99)',CR,LF,'$'
+fim_bin2ascii:
+    pop si
+    pop dx
+    pop cx
+    pop bx
+    pop ax 
+    ret
 
-    ;buffer db '-00+-00'   ; Reserva 7 bytes
-    buffer db 10, 0       ; Buffer para entrada (tamanho máximo 10)
-           times 10 db 0  ; Espaço para os dados
-    resultado db '-00+-00',CR,LF,'$'
-
-    newline db CR,LF,'$'
-
-    opSoma db 'op soma',CR,LF,'$'
-    opSub db 'op sub',CR,LF,'$'
-    opMult db 'op mult',CR,LF,'$'
-    opDiv db  'op div',CR,LF,'$'
+segment data
+    CR equ 0Dh 
+    LF equ 0Ah 
+    nova_linha db CR, LF, '$' 
+    offset db '0000000000' 
+    saida db '00000',13,10,'$'
+    resultado dw 0 
 
 segment stack stack
     resb 256
